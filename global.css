@@ -20,3 +20,47 @@ header p {
   margin: 0.25em 0 1em;
   color: #6e6e73;
 }
+
+/* Step 5.1: header with the title on the left and the slider on the right */
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1em;
+  align-items: end;
+  margin-bottom: 1em;
+}
+
+header p {
+  margin-bottom: 0;
+}
+
+header label {
+  margin-left: auto;
+  font-size: 0.9rem;
+  color: #6e6e73;
+}
+
+#time-slider {
+  width: 16em;
+  accent-color: steelblue;
+  vertical-align: middle;
+}
+
+/* Time and "(any time)" on their own line, so the slider doesn't jump */
+header time,
+header em {
+  display: block;
+  text-align: right;
+}
+
+header time {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1d1d1f;
+  font-variant-numeric: tabular-nums;
+}
+
+header em {
+  font-size: 1.25rem;
+  color: #a1a1a6;
+}

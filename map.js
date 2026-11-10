@@ -22,6 +22,11 @@ const bikeLaneStyle = {
   "line-opacity": 0.5,
 };
 
+// Step 5.4: 1440 "buckets", one per minute of the day.
+// Each bucket holds the trips that started (or ended) in that minute.
+let departuresByMinute = Array.from({ length: 1440 }, () => []);
+let arrivalsByMinute = Array.from({ length: 1440 }, () => []);
+
 // Step 3.3: turn a station's longitude/latitude into pixel x/y on the map
 function getCoords(station) {
   const point = new mapboxgl.LngLat(+station.lon, +station.lat);
@@ -29,18 +34,49 @@ function getCoords(station) {
   return { cx: x, cy: y };
 }
 
-// Step 4.2: count arrivals, departures, and total trips for each station
-function computeStationTraffic(stations, trips) {
-  // Trips that started at each station
+// Step 5.2: minutes since midnight -> "8:30 AM"
+function formatTime(minutes) {
+  const date = new Date(0, 0, 0, 0, minutes);
+  return date.toLocaleString("en-US", { timeStyle: "short" });
+}
+
+// Step 5.3: a Date -> minutes since midnight (e.g. 8:30 AM -> 510)
+function minutesSinceMidnight(date) {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+// Step 5.4: get the trips within 60 minutes of the selected time,
+// using the buckets instead of checking all 260,000 trips
+function filterByMinute(tripsByMinute, minute) {
+  if (minute === -1) {
+    return tripsByMinute.flat(); // no filter: all trips
+  }
+
+  // Wrap around midnight, e.g. 12:30 AM - 60 min = 11:30 PM
+  let minMinute = (minute - 60 + 1440) % 1440;
+  let maxMinute = (minute + 60) % 1440;
+
+  if (minMinute > maxMinute) {
+    // The window crosses midnight: take the end of the day + the start
+    let beforeMidnight = tripsByMinute.slice(minMinute);
+    let afterMidnight = tripsByMinute.slice(0, maxMinute);
+    return beforeMidnight.concat(afterMidnight).flat();
+  } else {
+    return tripsByMinute.slice(minMinute, maxMinute).flat();
+  }
+}
+
+// Step 4.2 + 5.4: count arrivals, departures, and total trips per station
+// for the selected time (-1 means all day)
+function computeStationTraffic(stations, timeFilter = -1) {
   const departures = d3.rollup(
-    trips,
+    filterByMinute(departuresByMinute, timeFilter),
     (v) => v.length,
     (d) => d.start_station_id,
   );
 
-  // Trips that ended at each station
   const arrivals = d3.rollup(
-    trips,
+    filterByMinute(arrivalsByMinute, timeFilter),
     (v) => v.length,
     (d) => d.end_station_id,
   );
@@ -93,12 +129,20 @@ map.on("load", async () => {
     return;
   }
 
-  // Step 4.1: load the March 2024 trips (about 260,000 rows)
-  const trips = await d3.csv("https://dsc106.com/labs/lab07/data/bluebikes-traffic-2024-03.csv");
+  // Step 4.1 + 5.3: load the trips, turn the time text into Dates,
+  // and drop each trip into its start and end minute buckets
+  await d3.csv("https://dsc106.com/labs/lab07/data/bluebikes-traffic-2024-03.csv", (trip) => {
+    trip.started_at = new Date(trip.started_at);
+    trip.ended_at = new Date(trip.ended_at);
+
+    departuresByMinute[minutesSinceMidnight(trip.started_at)].push(trip);
+    arrivalsByMinute[minutesSinceMidnight(trip.ended_at)].push(trip);
+
+    return trip;
+  });
 
   // Step 4.2: add arrivals, departures, and total traffic to each station
-  const stations = computeStationTraffic(jsonData.data.stations, trips);
-  console.log("Stations with traffic:", stations);
+  const stations = computeStationTraffic(jsonData.data.stations);
 
   // Step 4.3: circle AREA matches traffic, so use a square root scale
   const radiusScale = d3
@@ -106,21 +150,27 @@ map.on("load", async () => {
     .domain([0, d3.max(stations, (d) => d.totalTraffic)])
     .range([0, 25]);
 
-  // Step 3.3: one circle per station, drawn in the SVG on top of the map
+  // Step 3.3: one circle per station, drawn in the SVG on top of the map.
+  // The key (short_name) lets D3 match each station to its own circle on updates.
   const svg = d3.select("#map").select("svg");
 
   const circles = svg
     .selectAll("circle")
-    .data(stations)
+    .data(stations, (d) => d.short_name)
     .enter()
     .append("circle")
-    .attr("r", (d) => radiusScale(d.totalTraffic))
-    // Step 4.4: browser tooltip with exact numbers
-    .each(function (d) {
-      d3.select(this)
-        .append("title")
-        .text(`${d.totalTraffic} trips (${d.departures} departures, ${d.arrivals} arrivals)`);
-    });
+    .attr("r", (d) => radiusScale(d.totalTraffic));
+
+  // Step 4.4: browser tooltip with exact numbers
+  circles.append("title");
+
+  function updateTooltips() {
+    circles
+      .select("title")
+      .text((d) => `${d.totalTraffic} trips (${d.departures} departures, ${d.arrivals} arrivals)`);
+  }
+
+  updateTooltips();
 
   // Put each circle where its station is on the map right now
   function updatePositions() {
@@ -136,4 +186,41 @@ map.on("load", async () => {
   map.on("zoom", updatePositions);
   map.on("resize", updatePositions);
   map.on("moveend", updatePositions);
+
+  // Step 5.2: connect the slider
+  const timeSlider = document.getElementById("time-slider");
+  const selectedTime = document.getElementById("selected-time");
+  const anyTimeLabel = document.getElementById("any-time");
+
+  // Step 5.3: resize circles for the selected time
+  function updateScatterPlot(timeFilter) {
+    const filteredStations = computeStationTraffic(stations, timeFilter);
+
+    // Fewer trips when filtering, so allow bigger circles
+    timeFilter === -1 ? radiusScale.range([0, 25]) : radiusScale.range([3, 50]);
+
+    circles
+      .data(filteredStations, (d) => d.short_name)
+      .join("circle")
+      .attr("r", (d) => radiusScale(d.totalTraffic));
+
+    updateTooltips();
+  }
+
+  function updateTimeDisplay() {
+    let timeFilter = Number(timeSlider.value);
+
+    if (timeFilter === -1) {
+      selectedTime.textContent = "";
+      anyTimeLabel.style.display = "block";
+    } else {
+      selectedTime.textContent = formatTime(timeFilter);
+      anyTimeLabel.style.display = "none";
+    }
+
+    updateScatterPlot(timeFilter);
+  }
+
+  timeSlider.addEventListener("input", updateTimeDisplay);
+  updateTimeDisplay();
 });
