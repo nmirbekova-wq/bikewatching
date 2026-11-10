@@ -1,0 +1,22 @@
+body {
+  font: 100%/1.5 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  display: flex;
+  flex-flow: column;
+  max-width: 80em;
+  min-height: 100vh;
+  box-sizing: border-box;
+  margin: auto;
+  padding: 1em;
+  background: #f5f5f7;
+  color: #1d1d1f;
+}
+
+h1 {
+  margin: 0;
+  letter-spacing: -0.03em;
+}
+
+header p {
+  margin: 0.25em 0 1em;
+  color: #6e6e73;
+}
