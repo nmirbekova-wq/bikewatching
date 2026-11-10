@@ -5,3 +5,19 @@
   overflow: hidden;
   box-shadow: 0 4px 24px rgb(0 0 0 / 0.08);
 }
+
+/* Step 3.2: SVG layer on top of the map */
+#map svg {
+  position: absolute;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* let mouse events reach the map so you can drag */
+}
+
+#map circle {
+  fill: steelblue;
+  fill-opacity: 0.8;
+  stroke: white;
+  stroke-width: 1;
+}
