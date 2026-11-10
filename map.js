@@ -29,6 +29,32 @@ function getCoords(station) {
   return { cx: x, cy: y };
 }
 
+// Step 4.2: count arrivals, departures, and total trips for each station
+function computeStationTraffic(stations, trips) {
+  // Trips that started at each station
+  const departures = d3.rollup(
+    trips,
+    (v) => v.length,
+    (d) => d.start_station_id,
+  );
+
+  // Trips that ended at each station
+  const arrivals = d3.rollup(
+    trips,
+    (v) => v.length,
+    (d) => d.end_station_id,
+  );
+
+  // Add the counts to each station (0 if a station had no trips)
+  return stations.map((station) => {
+    let id = station.short_name;
+    station.arrivals = arrivals.get(id) ?? 0;
+    station.departures = departures.get(id) ?? 0;
+    station.totalTraffic = station.arrivals + station.departures;
+    return station;
+  });
+}
+
 // Wait for the map to finish loading before adding data
 map.on("load", async () => {
   // Step 2.1: Boston bike lanes
@@ -67,8 +93,18 @@ map.on("load", async () => {
     return;
   }
 
-  let stations = jsonData.data.stations;
-  console.log("Stations Array:", stations);
+  // Step 4.1: load the March 2024 trips (about 260,000 rows)
+  const trips = await d3.csv("https://dsc106.com/labs/lab07/data/bluebikes-traffic-2024-03.csv");
+
+  // Step 4.2: add arrivals, departures, and total traffic to each station
+  const stations = computeStationTraffic(jsonData.data.stations, trips);
+  console.log("Stations with traffic:", stations);
+
+  // Step 4.3: circle AREA matches traffic, so use a square root scale
+  const radiusScale = d3
+    .scaleSqrt()
+    .domain([0, d3.max(stations, (d) => d.totalTraffic)])
+    .range([0, 25]);
 
   // Step 3.3: one circle per station, drawn in the SVG on top of the map
   const svg = d3.select("#map").select("svg");
@@ -78,7 +114,13 @@ map.on("load", async () => {
     .data(stations)
     .enter()
     .append("circle")
-    .attr("r", 5);
+    .attr("r", (d) => radiusScale(d.totalTraffic))
+    // Step 4.4: browser tooltip with exact numbers
+    .each(function (d) {
+      d3.select(this)
+        .append("title")
+        .text(`${d.totalTraffic} trips (${d.departures} departures, ${d.arrivals} arrivals)`);
+    });
 
   // Put each circle where its station is on the map right now
   function updatePositions() {
