@@ -27,6 +27,15 @@ const bikeLaneStyle = {
 let departuresByMinute = Array.from({ length: 1440 }, () => []);
 let arrivalsByMinute = Array.from({ length: 1440 }, () => []);
 
+// Step 6.1: turn the share of departures (0 to 1) into just 3 values:
+// 0 = mostly arrivals, 0.5 = balanced, 1 = mostly departures
+let stationFlow = d3.scaleQuantize().domain([0, 1]).range([0, 0.5, 1]);
+
+// Stations with no trips count as balanced (avoids dividing by 0)
+function departureRatio(station) {
+  return station.totalTraffic ? stationFlow(station.departures / station.totalTraffic) : 0.5;
+}
+
 // Step 3.3: turn a station's longitude/latitude into pixel x/y on the map
 function getCoords(station) {
   const point = new mapboxgl.LngLat(+station.lon, +station.lat);
@@ -159,7 +168,8 @@ map.on("load", async () => {
     .data(stations, (d) => d.short_name)
     .enter()
     .append("circle")
-    .attr("r", (d) => radiusScale(d.totalTraffic));
+    .attr("r", (d) => radiusScale(d.totalTraffic))
+    .style("--departure-ratio", (d) => departureRatio(d));
 
   // Step 4.4: browser tooltip with exact numbers
   circles.append("title");
@@ -202,7 +212,8 @@ map.on("load", async () => {
     circles
       .data(filteredStations, (d) => d.short_name)
       .join("circle")
-      .attr("r", (d) => radiusScale(d.totalTraffic));
+      .attr("r", (d) => radiusScale(d.totalTraffic))
+      .style("--departure-ratio", (d) => departureRatio(d));
 
     updateTooltips();
   }

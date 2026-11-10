@@ -16,9 +16,52 @@
 }
 
 #map circle {
-  fill: steelblue;
+  fill: var(--color);
   fill-opacity: 0.6;
   stroke: white;
   stroke-width: 1;
   pointer-events: auto; /* turn mouse events back on so tooltips work */
+}
+
+/* Step 6: color shows traffic flow, shared by the circles and the legend */
+#map circle,
+.legend > div {
+  --color-departures: steelblue;
+  --color-arrivals: darkorange;
+  --color: color-mix(
+    in oklch,
+    var(--color-departures) calc(100% * var(--departure-ratio)),
+    var(--color-arrivals)
+  );
+}
+
+/* Step 6.2: legend with round swatches next to labels */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5em;
+  margin-block: 1em;
+  font-size: 0.9rem;
+}
+
+.legend-title {
+  color: #6e6e73;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.legend > div {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.legend > div::before {
+  content: "";
+  width: 0.9em;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--color);
 }
